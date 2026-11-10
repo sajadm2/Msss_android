@@ -73,4 +73,3 @@ jobs:
           name: mssh-alpha-debug
           path: |
             **/build/outputs/apk/debug/*.apk
-            
