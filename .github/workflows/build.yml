@@ -19,48 +19,52 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android NDK
-        uses: android-actions/setup-android@v3
-
-      - name: Find and Extract ZIP Project
+      - name: Install Android NDK Manually
         run: |
-          echo "Searching for uploaded ZIP files..."
+          echo "Downloading Android NDK 27.2.12479018..."
+          curl -Lo ndk.zip https://dl.google.com/android/repository/android-ndk-r27b-linux.zip
+          unzip -q ndk.zip
+          sudo mv android-ndk-r27b /usr/local/android-ndk
+          echo "ANDROID_NDK_HOME=/usr/local/android-ndk" >> $GITHUB_ENV
+          echo "ndk.dir=/usr/local/android-ndk" >> local.properties
+
+      - name: Find and Extract Project ZIP
+        run: |
+          echo "Searching for uploaded zip file..."
           ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
-          
           if [ -z "$ZIP_FILE" ]; then
-            echo "Error: No .zip file found in the repository root!"
+            echo "Error: No ZIP file found in the repository root!"
             exit 1
           fi
-          
           echo "Found ZIP: $ZIP_FILE"
           mkdir -p extracted-project
           unzip -q "$ZIP_FILE" -d extracted-project
-          
-          # Find the actual project directory (handles both flat and nested structures)
-          if [ -d "extracted-project/MousaviVPN" ]; then
-            echo "PROJECT_DIR=extracted-project/MousaviVPN" >> $GITHUB_ENV
-          else
-            # Find the first subdirectory inside extracted-project
-            SUB_DIR=$(find extracted-project -mindepth 1 -maxdepth 1 -type d | head -n 1)
-            if [ -n "$SUB_DIR" ]; then
-              echo "PROJECT_DIR=$SUB_DIR" >> $GITHUB_ENV
-            else
-              echo "PROJECT_DIR=extracted-project" >> $GITHUB_ENV
-            fi
+
+      - name: Locate Project Directory and gradlew
+        run: |
+          echo "Locating build files..."
+          # پیدا کردن پوشه‌ای که حاوی build.gradle یا settings.gradle است
+          PROJ_DIR=$(find extracted-project -name "settings.gradle.kts" -o -name "settings.gradle" | head -n 1 | xargs dirname)
+          if [ -z "$PROJ_DIR" ]; then
+            echo "Error: Could not locate project root inside ZIP!"
+            exit 1
+          echo "Project directory is: $PROJ_DIR"
+          echo "PROJECT_DIR=$PROJ_DIR" >> $GITHUB_ENV
+
+          # اگر gradlew وجود ندارد، آن را می‌سازیم
+          if [ ! -f "$PROJ_DIR/gradlew" ]; then
+            echo "Generating Gradle wrapper..."
+            cd "$PROJ_DIR"
+            gradle wrapper --gradle-version 8.9
+            cd -
           fi
 
-      - name: Prepare Gradle Wrapper
-        run: |
-          cd ${{ env.PROJECT_DIR }}
-          if [ ! -f "gradlew" ]; then
-            echo "gradlew not found. Generating gradle wrapper..."
-            gradle wrapper --gradle-version 8.9
-          fi
-          chmod +x ./gradlew
+          chmod +x "$PROJ_DIR/gradlew"
 
       - name: Build Debug APK with Gradle
         run: |
-          cd ${{ env.PROJECT_DIR }}
+          echo "Starting Gradle build..."
+          cd "${{ env.PROJECT_DIR }}"
           ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK Artifact
@@ -68,4 +72,5 @@ jobs:
         with:
           name: mssh-alpha-debug
           path: |
-            ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
+            **/build/outputs/apk/debug/*.apk
+            
