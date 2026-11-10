@@ -1,0 +1,32 @@
+name: Build from ZIP
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Unzip project
+        run: |
+          if [ -f mssh-final-ready.zip ]; then
+            unzip mssh-final-ready.zip -d .
+          else
+            echo "Zip file not found!"
+            exit 1
+          fi
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build with Gradle
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: mssh-alpha-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          
